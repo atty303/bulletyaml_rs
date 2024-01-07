@@ -7,6 +7,7 @@ extern crate derive_new;
 extern crate matches;
 #[macro_use]
 extern crate thiserror;
+extern crate serde_yaml;
 
 pub use runner::{AppRunner, Runner, RunnerData, State};
 pub use tree::BulletML;
@@ -15,3 +16,4 @@ pub mod errors;
 pub mod parse;
 mod runner;
 mod tree;
+mod parse_yaml;

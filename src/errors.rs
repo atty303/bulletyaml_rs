@@ -24,6 +24,15 @@ pub enum ParseError {
         backtrace: Backtrace,
     },
 
+    #[error("Yaml error")]
+    Yaml {
+        #[from]
+        source: serde_yaml::Error,
+        #[cfg(feature = "backtrace")]
+        #[new(value = "Backtrace::capture()")]
+        backtrace: Backtrace,
+    },
+
     #[error("Unexpected element {element} at position {pos}")]
     UnexpectedElement {
         element: String,

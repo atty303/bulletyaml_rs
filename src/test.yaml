@@ -1,0 +1,15 @@
+BulletML[type=vertical]:
+  - bullet=top:
+      direction: 270
+      speed: 2
+  - action:
+  - fire=label:
+      direction: 90
+      speed: 1
+      bullet: {}
+      bulletRef:
+        label: fire
+        params:
+          - 10
+          - 20
+          - 30
