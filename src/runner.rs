@@ -189,14 +189,14 @@ pub trait AppRunner<D> {
     ///
     /// Nevertheless there could be more complex use cases which involve creating a new runner with
     /// the same BulletML document or even another one.
-    fn create_simple_bullet(&mut self, data: &mut D, direction: f64, speed: f64);
+    fn create_simple_bullet(&mut self, data: &mut D, direction: f64, speed: f64, label: &Option<String>);
     /// Tells the application to create a bullet based on the given `state`, initial `direction`
     /// and initial `speed`.
     ///
     /// The typical use case is to create a new runner with the same BulletML document. See
     /// [Runner::new_from_state](struct.Runner.html#method.new_from_state) and
     /// [Runner::init_from_state](struct.Runner.html#method.init_from_state).
-    fn create_bullet(&mut self, data: &mut D, state: State, direction: f64, speed: f64);
+    fn create_bullet(&mut self, data: &mut D, state: State, direction: f64, speed: f64, label: &Option<String>);
     /// Gets the current iteration number.
     fn get_turn(&self, data: &D) -> u32;
     /// Tells the application to make this bullet vanish.
@@ -473,7 +473,7 @@ impl RunnerImpl {
             #[cfg(test)]
             runner.log(&mut data.data, node.get());
             match node.get() {
-                BulletMLNode::Bullet { .. } => self.run_bullet(data, runner),
+                BulletMLNode::Bullet(label) => self.run_bullet(label, data, runner),
                 BulletMLNode::Action { .. } => self.run_action(node),
                 BulletMLNode::Fire { .. } => self.run_fire(data, runner),
                 BulletMLNode::ChangeDirection => self.run_change_direction(data, runner),
@@ -690,7 +690,7 @@ impl RunnerImpl {
         }
     }
 
-    fn run_bullet<D>(&mut self, data: &mut RunnerData<D>, runner: &mut dyn AppRunner<D>) {
+    fn run_bullet<D>(&mut self, label: &Option<String>, data: &mut RunnerData<D>, runner: &mut dyn AppRunner<D>) {
         let arena = &data.bml.arena;
         self.set_speed(data, runner);
         self.set_direction(data, runner);
@@ -709,14 +709,14 @@ impl RunnerImpl {
             |act| Self::get_children_ids_matching(arena, act, BulletMLNode::match_any_action),
         );
         if all_actions.is_empty() {
-            runner.create_simple_bullet(&mut data.data, self.dir.get(), self.spd.get());
+            runner.create_simple_bullet(&mut data.data, self.dir.get(), self.spd.get(), label);
         } else {
             let state = State {
                 bml_type: self.bml_type,
                 nodes: all_actions.into_boxed_slice(),
                 parameters: self.parameters.clone(),
             };
-            runner.create_bullet(&mut data.data, state, self.dir.get(), self.spd.get());
+            runner.create_bullet(&mut data.data, state, self.dir.get(), self.spd.get(), label);
         }
         self.act = None;
     }
@@ -1121,10 +1121,10 @@ mod test_runner {
             1.
         }
 
-        fn create_simple_bullet(&mut self, data: &mut TestAppData<'a>, direction: f64, speed: f64) {
+        fn create_simple_bullet(&mut self, data: &mut TestAppData<'a>, direction: f64, speed: f64, label: &Option<String>) {
             data.logs[self.index]
                 .log
-                .push(format!("create_simple_bullet({}, {})", direction, speed));
+                .push(format!("create_simple_bullet({}, {}, {:?})", direction, speed, label));
         }
 
         fn create_bullet(
@@ -1133,10 +1133,11 @@ mod test_runner {
             state: State,
             direction: f64,
             speed: f64,
+            label: &Option<String>
         ) {
             data.logs[self.index]
                 .log
-                .push(format!("create_bullet({}, {})", direction, speed));
+                .push(format!("create_bullet({}, {}, {:?})", direction, speed, label));
             let runner = Runner::new_from_state(TestAppRunner::new(0), state);
             self.new_runners.push(runner);
         }
@@ -1232,7 +1233,7 @@ mod test_runner {
         logs[0].assert_log(r#"Action(Some("top"))"#, 1);
         logs[0].assert_log(r#"Fire(None)"#, 1);
         logs[0].assert_log(r#"Bullet(None)"#, 1);
-        logs[0].assert_log(r#"create_simple_bullet(0, 10)"#, 1);
+        logs[0].assert_log(r#"create_simple_bullet(0, 10, None)"#, 1);
         logs[0].assert_log(r#"=== 1"#, 1);
         TestLogs(logs);
     }
@@ -1271,7 +1272,7 @@ mod test_runner {
             logs[0].assert_log(r#"Action(None)"#, 1);
             logs[0].assert_log(r#"Fire(None)"#, 1);
             logs[0].assert_log(r#"Bullet(None)"#, 1);
-            logs[0].assert_log(r#"create_simple_bullet(0, 1)"#, 1);
+            logs[0].assert_log(r#"create_simple_bullet(0, 1, None)"#, 1);
             logs[0].assert_log(r#"Wait(Const(100.0))"#, 1);
             for j in 0..100 {
                 logs[0].assert_log(&format!(r#"=== {}"#, i * 100 + j + 1), 1);
@@ -1420,11 +1421,11 @@ mod test_runner {
         logs[0].assert_log(r#"Fire(None)"#, 1);
         logs[0].assert_log(r#"BulletRef("parentbit")"#, 1);
         logs[0].assert_log(r#"Bullet(Some("parentbit"))"#, 1);
-        logs[0].assert_log(r#"create_bullet(30, 2)"#, 1);
+        logs[0].assert_log(r#"create_bullet(30, 2, Some("parentbit"))"#, 1);
         logs[0].assert_log(r#"Fire(None)"#, 1);
         logs[0].assert_log(r#"BulletRef("parentbit")"#, 1);
         logs[0].assert_log(r#"Bullet(Some("parentbit"))"#, 1);
-        logs[0].assert_log(r#"create_bullet(330, 2)"#, 1);
+        logs[0].assert_log(r#"create_bullet(330, 2, Some("parentbit"))"#, 1);
         logs[0].assert_log(r#"Wait(Const(300.0))"#, 1);
         for i in 0..300 {
             logs[0].assert_log(&format!(r#"=== {}"#, i + 1), 1);
@@ -1440,7 +1441,7 @@ mod test_runner {
                     logs[i].assert_log(r#"Fire(None)"#, 1);
                     logs[i].assert_log(r#"BulletRef("aimbit")"#, 1);
                     logs[i].assert_log(r#"Bullet(Some("aimbit"))"#, 1);
-                    logs[i].assert_log(&format!(r#"create_bullet({}, 0.6)"#, k * 90 % 360), 1);
+                    logs[i].assert_log(&format!(r#"create_bullet({}, 0.6, Some("aimbit"))"#, k * 90 % 360), 1);
                 }
                 logs[i].assert_log(r#"Wait(Const(5.0))"#, 1);
                 for k in 0..5 {
@@ -1471,14 +1472,14 @@ mod test_runner {
                 if dir < 0 {
                     dir += 360;
                 }
-                logs[i].assert_log(&format!(r#"create_simple_bullet({}, {})"#, dir, spd), 1);
+                logs[i].assert_log(&format!(r#"create_simple_bullet({}, {}, None)"#, dir, spd), 1);
                 logs[i].assert_log(r#"Repeat"#, 1);
                 for _ in 0..7 {
                     logs[i].assert_log(r#"Action(None)"#, 1);
                     logs[i].assert_log(r#"Fire(None)"#, 1);
                     logs[i].assert_log(r#"Bullet(None)"#, 1);
                     spd += 0.1;
-                    logs[i].assert_log(&format!(r#"create_simple_bullet({}, {})"#, dir, spd), 1);
+                    logs[i].assert_log(&format!(r#"create_simple_bullet({}, {}, None)"#, dir, spd), 1);
                 }
                 logs[i].assert_log(r#"Vanish"#, 1);
             }
@@ -1553,7 +1554,7 @@ mod test_runner {
         logs[0].assert_log(r#"do_change_speed(1)"#, 1);
         logs[0].assert_log(r#"Fire(None)"#, 1);
         logs[0].assert_log(r#"Bullet(None)"#, 1);
-        logs[0].assert_log(r#"create_simple_bullet(0, 10)"#, 1);
+        logs[0].assert_log(r#"create_simple_bullet(0, 10, None)"#, 1);
         logs[0].assert_log(r#"=== 12"#, 1);
         TestLogs(logs);
     }
@@ -1608,7 +1609,7 @@ mod test_runner {
         logs[0].assert_log(r#"Fire(None)"#, 1);
         logs[0].assert_log(r#"BulletRef("accel")"#, 1);
         logs[0].assert_log(r#"Bullet(Some("accel"))"#, 1);
-        logs[0].assert_log(r#"create_bullet(0, 0.09999999999999998)"#, 1);
+        logs[0].assert_log(r#"create_bullet(0, 0.09999999999999998, Some("accel"))"#, 1);
         logs[0].assert_log(r#"Repeat"#, 1);
         logs[0].assert_log(r#"Action(None)"#, 1);
         logs[0].assert_log(r#"Wait(Const(2.0))"#, 1);
@@ -1617,7 +1618,7 @@ mod test_runner {
         logs[0].assert_log(r#"Fire(None)"#, 1);
         logs[0].assert_log(r#"BulletRef("accel")"#, 1);
         logs[0].assert_log(r#"Bullet(Some("accel"))"#, 1);
-        logs[0].assert_log(r#"create_bullet(0, 0.39999999999999997)"#, 1);
+        logs[0].assert_log(r#"create_bullet(0, 0.39999999999999997, Some("accel"))"#, 1);
         logs[0].assert_log(r#"Vanish"#, 1);
         logs[0].assert_log(r#"=== 3"#, 1);
 
@@ -1712,10 +1713,10 @@ mod test_runner {
         logs[0].assert_log(r#"=== 1"#, 1);
         logs[0].assert_log(r#"Fire(None)"#, 1);
         logs[0].assert_log(r#"Bullet(None)"#, 1);
-        logs[0].assert_log(r#"create_bullet(0, 2)"#, 1);
+        logs[0].assert_log(r#"create_bullet(0, 2, None)"#, 1);
         logs[0].assert_log(r#"Fire(None)"#, 1);
         logs[0].assert_log(r#"Bullet(None)"#, 1);
-        logs[0].assert_log(r#"create_bullet(0, 2)"#, 1);
+        logs[0].assert_log(r#"create_bullet(0, 2, None)"#, 1);
         logs[0].assert_log(r#"Vanish"#, 1);
         logs[0].assert_log(r#"=== 2"#, 1);
 
@@ -1732,7 +1733,7 @@ mod test_runner {
         logs[1].assert_log(r#"do_change_direction(-90)"#, 1);
         logs[1].assert_log(r#"Fire(None)"#, 1);
         logs[1].assert_log(r#"Bullet(None)"#, 1);
-        logs[1].assert_log(r#"create_simple_bullet(0, 0)"#, 1);
+        logs[1].assert_log(r#"create_simple_bullet(0, 0, None)"#, 1);
         logs[1].assert_log(r#"Vanish"#, 1);
         logs[1].assert_log(r#"=== 5"#, 1);
 
@@ -1749,7 +1750,7 @@ mod test_runner {
         logs[2].assert_log(r#"do_change_direction(90)"#, 1);
         logs[2].assert_log(r#"Fire(None)"#, 1);
         logs[2].assert_log(r#"Bullet(None)"#, 1);
-        logs[2].assert_log(r#"create_simple_bullet(0, 0)"#, 1);
+        logs[2].assert_log(r#"create_simple_bullet(0, 0, None)"#, 1);
         logs[2].assert_log(r#"Vanish"#, 1);
         logs[2].assert_log(r#"=== 5"#, 1);
         TestLogs(logs);
@@ -1821,10 +1822,10 @@ mod test_runner {
         logs[0].assert_log(r#"=== 1"#, 1);
         logs[0].assert_log(r#"Fire(None)"#, 1);
         logs[0].assert_log(r#"Bullet(None)"#, 1);
-        logs[0].assert_log(r#"create_bullet(0, 1.6)"#, 1);
+        logs[0].assert_log(r#"create_bullet(0, 1.6, None)"#, 1);
         logs[0].assert_log(r#"Fire(None)"#, 1);
         logs[0].assert_log(r#"Bullet(None)"#, 1);
-        logs[0].assert_log(r#"create_bullet(0, 1.6)"#, 1);
+        logs[0].assert_log(r#"create_bullet(0, 1.6, None)"#, 1);
         logs[0].assert_log(r#"Vanish"#, 1);
         logs[0].assert_log(r#"=== 2"#, 1);
 
@@ -1841,7 +1842,7 @@ mod test_runner {
         logs[1].assert_log(r#"do_change_direction(0)"#, 1);
         logs[1].assert_log(r#"Fire(None)"#, 1);
         logs[1].assert_log(r#"Bullet(None)"#, 1);
-        logs[1].assert_log(r#"create_simple_bullet(0, 0.31999999999999995)"#, 1);
+        logs[1].assert_log(r#"create_simple_bullet(0, 0.31999999999999995, None)"#, 1);
         logs[1].assert_log(r#"Vanish"#, 1);
         logs[1].assert_log(r#"=== 5"#, 1);
 
@@ -1858,7 +1859,7 @@ mod test_runner {
         logs[2].assert_log(r#"do_change_direction(120)"#, 1);
         logs[2].assert_log(r#"Fire(None)"#, 1);
         logs[2].assert_log(r#"Bullet(None)"#, 1);
-        logs[2].assert_log(r#"create_simple_bullet(0, 0.48)"#, 1);
+        logs[2].assert_log(r#"create_simple_bullet(0, 0.48, None)"#, 1);
         logs[2].assert_log(r#"Vanish"#, 1);
         logs[2].assert_log(r#"=== 5"#, 1);
         TestLogs(logs);
